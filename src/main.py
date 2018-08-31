@@ -1,15 +1,15 @@
     #!/usr/bin/env python
 
-import rospy	#python for ros
+import rospy
 import math
 import matplotlib.pyplot as plt
 import time
 
-from parameter import *		# store sensor's data
+from parameter import *	
 from INS import *
 from KF import *
 import time
-from sensor_msgs.msg import Imu, MagneticField, NavSatFix	 # msg for imu,mag
+from sensor_msgs.msg import Imu, MagneticField, NavSatFix	 
 from xsens_msgs.msg import IMUDATA
 from novatel_msgs.msg import RTKPOS, INSPVAX
 from geometry_msgs.msg import TwistStamped
@@ -20,17 +20,15 @@ KF_Cal = KF()
 
 def Callback_Imu(data):	# ENU
 	# xsens_driver
-	INS_Data.Gyro[0] = data.angular_velocity.x  #  orig  data.angular_velocity.x 
-	INS_Data.Gyro[1] = data.angular_velocity.y  #  orig  data.angular_velocity.y 
+	INS_Data.Gyro[0] = data.angular_velocity.x 
+	INS_Data.Gyro[1] = data.angular_velocity.y
 	INS_Data.Gyro[2] = data.angular_velocity.z
 
 	INS_Data.Accel[0] = data.linear_acceleration.x 
 	INS_Data.Accel[1] = data.linear_acceleration.y
-	INS_Data.Accel[2] = - data.linear_acceleration.z #  orig  data.linear_acceleration.
+	INS_Data.Accel[2] = - data.linear_acceleration.z 
 
 	INS_Data.seq = data.header.seq
-	#print 'Gyro:', INS_Data.Gyro
-
 
 def Callback_GPS_Service(data):
 	GPS_Data.Service = data.status.service
@@ -75,29 +73,34 @@ def INS_Message(Pos, Vel, Ang, i):
 
 	return INS_Msg
 
-def main(Filter_Hz = 50, Filter_Numble = 50, Sample_Number = 1):
+# Filter_Hz决定了惯导解算周期，Filter_Numble用于初始对准计数，Sample_Number决定了惯导解算中的子样数
+def main(Filter_Hz = 50, Filter_Numble = 1000, Sample_Number = 1):
 	rospy.init_node('Subscriber_rawimu', anonymous = True)
 
-	#rospy.Subscriber('/hg1120/data', Imu, Callback_Imu)
+	# 需要订阅的话题
 	rospy.Subscriber('/xsens_driver/imu/data', Imu, Callback_Imu)
 	rospy.Subscriber('/xsens_driver/fix', NavSatFix, Callback_GPS_Service)
 	rospy.Subscriber('/novatel_data/rtkpos', RTKPOS, Callback_GPS_Pos)
 	rospy.Subscriber('/novatel_data/inspvax', INSPVAX, Callback_GPS_Vel)
+	# 需要发布的话题
 	pub = rospy.Publisher('/INS', INSPVAX, queue_size = 10)
 
 	rate = rospy.Rate(Filter_Hz)	# set update frequency
 	Delta_T = 1.0 / Filter_Hz
 	number = Filter_Numble
-	# initial alignment
-	Align_Flag = False
+	
+	# 初始对准
+	Align_Flag = False	# 初始对准标志位
 	Align_Time = 0
 	while not Align_Flag:
-		if GPS_Data.Service == 1:
+		if GPS_Data.Service == 1:	# 需要GPS有效
 			Align_Time = Align_Time + 1
+			# 利用卡尔曼滤波进行对准
 			Ang_align = INS_Cal.Alignment_KF(INS_Data.Gyro, INS_Data.Accel, GPS_Data.Pos[0], GPS_Data.Ang[2], number)
-
+			
+			# 对准一定时间后认为完成，进行赋值。  对于高精度IMU，需考虑是否滤波结果收敛
 			if (Align_Time > number) and (Align_Time % 50)  == 0:
-				print Ang_align
+				#print Ang_align
 				Align_Flag = INS_Cal.Initial_Alignment(GPS_Data.Pos, GPS_Data.Vel, Ang_align, GPS_Data.Service)
 				INS_Cal.Initial_Correct(number)
 				Align_Flag = True
@@ -108,18 +111,18 @@ def main(Filter_Hz = 50, Filter_Numble = 50, Sample_Number = 1):
 	i = 0
 	j = 1
 	Error = numpy.zeros( (15, 1) )
+	# 组合导航系统开始工作
 	while not rospy.is_shutdown() and Align_Flag:
+		# 惯导解算
 		Pos, Vel, Ang, Cb2n, Error = INS_Cal.Update(INS_Data.Gyro, INS_Data.Accel, Error, Sample_Number, Delta_T)
+		# 导航数据发布
 		pub.publish(INS_Message(Pos, Vel, Ang, i))
 		i = i + 1
-
+		# 滤波修正惯导解算结果，50个解算周期后运行一次
 		if i == 50:	
-			Error, Z = KF_Cal.Kalman_Filter(Pos, Vel, Ang, Cb2n, INS_Data.Gyro, INS_Data.Accel, GPS_Data.Pos, GPS_Data.Vel, GPS_Data.Ang, 1)
-			
+			Error, Z = KF_Cal.Kalman_Filter(Pos, Vel, Ang, Cb2n, INS_Data.Gyro, INS_Data.Accel, GPS_Data.Pos, GPS_Data.Vel, GPS_Data.Ang, Delta_T × 50)
 			print ' '
-			
 			j = j + 1			
-
 			i = 0
 
 		rate.sleep()
