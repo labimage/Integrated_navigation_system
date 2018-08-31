@@ -12,7 +12,7 @@ class INS():
 	Re = 6378137
 	g = 9.7803267714
 	
-
+	# 初始化参数
 	def __init__(self):
 		self.Ali_KF_Time = 0
 		self.Correct_Flag = 0
@@ -54,7 +54,8 @@ class INS():
 		self.DVelocity = numpy.zeros( (3,4) )
 		self.DAngle_K = 0
 		self.Calcu_Num = 0
-
+	
+	# 利用卡尔曼滤波进行初始对准
 	def Alignment_KF(self, Gyro, Acce, Pos, Ang, Filter_Number):
 		Omig_N = self.wie * math.cos(Pos)
 		Omig_U = self.wie * math.sin(Pos)
@@ -69,13 +70,13 @@ class INS():
 		self.A[1, 0] = - Omig_U
 		self.A[1, 4] = 1
 		self.A[2, 0] = Omig_N
-		self.A[2, 1] = 0
+ 		self.A[2, 1] = 0
 
 		self.Q[0:3, 0:3] = numpy.eye(3) * (0.0005 * self.rad) **2
 
 
 		self.R = numpy.eye(2) * 0.001 ** 2
-
+		# 计算一步状态转移矩阵
 		F = numpy.zeros( (5, 5) )
 		F = numpy.eye(5) + self.A * 0.1 / 0.02
 
@@ -93,8 +94,11 @@ class INS():
 		
 		
 		self.X[2] = Ang * self.rad
+		
+		# 返回以°为单位的姿态角
 		return self.X[0:3] * self.deg
 
+	# 计算number个惯性数据的均值和方差
 	def Initial_Correct(self, number):
 		if self.Correct_Flag == 0:
 			for i in range(number):	
@@ -114,7 +118,8 @@ class INS():
 
 			print 'The sum is:', self.Correct_Sum
 			print 'The square is:', self.Correct_Square
-
+	
+	# 初始化位置、速度、姿态以及姿态矩阵和四元数。
 	def Initial_Alignment(self, Pos, Vel, Ang, flag):#, mag, pos, vel):
 		self.Pos[0] = Pos[0]
 		self.Pos[1] = Pos[1] 
@@ -135,7 +140,8 @@ class INS():
 		self.Acc_bias[0] = 0
 		self.Acc_bias[1] = 0
 		self.Acc_bias[2] = 0
-
+		
+		# 初始化四元数
 		a0 = self.Quaternion[0] = math.cos(self.Ang[0] / 2) * math.cos(self.Ang[1] / 2) * math.cos(self.Ang[2] / 2) + \
 						math.sin(self.Ang[0] / 2) * math.sin(self.Ang[1] / 2) * math.sin(self.Ang[2] / 2)
 		a1 = self.Quaternion[1] = math.sin(self.Ang[0] / 2) * math.cos(self.Ang[1] / 2) * math.cos(self.Ang[2] / 2) + \
@@ -144,7 +150,8 @@ class INS():
 						math.sin(self.Ang[0] / 2) * math.cos(self.Ang[1] / 2) * math.sin(self.Ang[2] / 2)
 		a3 = self.Quaternion[3] = math.sin(self.Ang[0] / 2) * math.sin(self.Ang[1] / 2) * math.cos(self.Ang[2] / 2) - \
 						math.cos(self.Ang[0] / 2) * math.cos(self.Ang[1] / 2) * math.sin(self.Ang[2] / 2)
-
+		
+		# 初始化姿态矩阵
 		self.DCM_b2n[0,0] = a0 ** 2 + a1 ** 2 - a2 ** 2 + a3 ** 2
 		self.DCM_b2n[0,1] = 2 * ( a1 * a2 - a0 * a3)
 		self.DCM_b2n[0,2] = 2 * ( a1 * a3 + a0 * a2)
@@ -168,8 +175,10 @@ class INS():
 			print 'Alignment is failed! GPS is not online!'
 
 		return Flag_Out
-
+	
+	# 对数据进行修正
 	def Correct(self, gyro, acc, Error):
+		# 利用均值和方差修正惯性元件的数据
 		if gyro[0] < self.Correct_Sum[0] + 3 * self.Correct_Square[0] and gyro[0] > self.Correct_Sum[0] - 3 * self.Correct_Square[0]:
 			gyro[0] = 0
 		elif gyro[0] > self.Correct_Sum[0] + 3 * self.Correct_Square[0]:
@@ -190,14 +199,16 @@ class INS():
 		#	gyro[2] = gyro[2] - (self.Correct_Sum[2] + 0 * self.Correct_Square[2])
 		#elif gyro[2] < self.Correct_Sum[2] - 1 * self.Correct_Square[2]:
 		#	gyro[2] = gyro[2] + (self.Correct_Sum[2] - 0 * self.Correct_Square[2])
-
+		
+		# 利用卡尔曼滤波结果修正位置速度和姿态
 		self.Pos[0] = self.Pos[0] - Error[1]
 		self.Pos[1] = self.Pos[1] - Error[0]
 		self.Pos[2] = self.Pos[2] - Error[2]
 
 		self.Vel = self.Vel - Error[3:6]
 		self.Ang = self.Ang - Error[6:9]
-
+		
+		# 修正后更新四元数
 		self.Quaternion[0] = math.cos(self.Ang[0] / 2) * math.cos(self.Ang[1] / 2) * math.cos(self.Ang[2] / 2) + \
 						math.sin(self.Ang[0] / 2) * math.sin(self.Ang[1] / 2) * math.sin(self.Ang[2] / 2)
 		self.Quaternion[1] = math.sin(self.Ang[0] / 2) * math.cos(self.Ang[1] / 2) * math.cos(self.Ang[2] / 2) + \
@@ -206,7 +217,8 @@ class INS():
 						math.sin(self.Ang[0] / 2) * math.cos(self.Ang[1] / 2) * math.sin(self.Ang[2] / 2)
 		self.Quaternion[3] = math.sin(self.Ang[0] / 2) * math.sin(self.Ang[1] / 2) * math.cos(self.Ang[2] / 2) - \
 						math.cos(self.Ang[0] / 2) * math.cos(self.Ang[1] / 2) * math.sin(self.Ang[2] / 2)
-
+		
+		# 误差清零
 		error = numpy.zeros( (15, 1) )
 
 		return gyro, acc, error
@@ -214,12 +226,12 @@ class INS():
 	def Update(self, gyro_origin, acce_origin, error, Number, Delta_T):
 		gyro, acce, Error = self.Correct(gyro_origin, acce_origin, error)
 		
-		#
+		# 地球自转角速率
 		self.wien[0] = 0
 		self.wien[1] = self.wie * math.cos( self.Pos[1] )
 		self.wien[2] = self.wie * math.sin( self.Pos[1] )
 
-		#
+		# 位移角速率
 		self.Rm = self.Re * (1 - 2 * self.e + 3 *self. e * math.sin( self.Pos[1] )**2)
 		self.Rn = self.Re * (1 + self.e * math.sin( self.Pos[1] )**2)
 		self.wenn[0] = self.Vel[1] / (self.Rm + self.Pos[2])
@@ -242,12 +254,14 @@ class INS():
 		return [self.Pos, self.Vel, self.Ang, self.DCM_b2n, Error]
 
 	def Update_and_Correct(self, Gyro, Acce, Number, Delta_T):
+		# 根据设定的子样数，采集惯性器件数据
 		if self.DAngle_K < Number:
 			self.DAngle[0:3, self.DAngle_K] = Gyro.T * Delta_T#( Gyro - ( self.DCM_b2n.T.dot( (self.wien + self.wenn) ) ) ).T * Delta_T
 			self.DVelocity[0:3, self.DAngle_K] = Acce.T	
 			self.DAngle_K = self.DAngle_K + 1
 			self.Calcu_Num = self.Calcu_Num + 1
-
+		
+		# 根据采集的数据，进行解算
 		if self.DAngle_K == Number:
 			self.DAngle_K = 0
 
@@ -316,7 +330,7 @@ class INS():
 				DVel = 0
 				DPos = 0
 			
-			# update attitude
+			# 更新姿态
 			DAng = math.sqrt( DAng_rate[0] ** 2 + DAng_rate[1] ** 2 + DAng_rate[2] ** 2 )
 
 			Delta_Ang = numpy.zeros((4,4))
@@ -345,7 +359,7 @@ class INS():
 			a1 = self.Quaternion[1]
 			a2 = self.Quaternion[2]
 			a3 = self.Quaternion[3]
-
+			
 			self.DCM_b2n[0,0] = a0 ** 2 + a1 ** 2 - a2 ** 2 + a3 ** 2
 			self.DCM_b2n[0,1] = 2 * ( a1 * a2 - a0 * a3)
 			self.DCM_b2n[0,2] = 2 * ( a1 * a3 + a0 * a2)
@@ -416,7 +430,8 @@ class INS():
 			#self.Pos[0] = self.Pos[0] + 0.5 * ( self.Vel[0] + Vel_pre[0] ) * Delta_T / ( ( self.Rn + self.Vel[2] ) * math.cos( self.Pos[1] ) )
 			#self.Pos[1] = self.Pos[1] + 0.5 * ( self.Vel[1] + Vel_pre[1] ) * Delta_T / ( self.Rm + self.Vel[2] )
 			#self.Pos[2] = self.Pos[2] + 0.5 * ( self.Vel[2] + Vel_pre[2] ) * Delta_T 
-
+	
+	# 互补滤波，利用加速度求取pitch和roll，来抑制角度的发散
 	def Complement_Filter(self, Input_Ang, CF_Acce):
 		CF_Ang = numpy.zeros((2,1))
 		resault = numpy.zeros((2,1))
@@ -435,6 +450,7 @@ class INS():
 		else:
 			CF_Ang[1] = CF_Ang[1]
 		
+		# 关键参数，决定了加速度计给出的角度的权重，一般比较小。
 		K = 0.02
 
 		resault[0] = ( 1 - K ) * Input_Ang[0] + K * CF_Ang[0]
@@ -455,7 +471,7 @@ class INS():
 
 		return resault
 
-
+	# 叉乘
 	def Cross_Product(self, a, b):
 		c = numpy.zeros((3,1))
 		c[0] = a[1] * b[2] - b[1] * a[2]
