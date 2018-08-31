@@ -34,14 +34,15 @@ class KF():
 		self.P = numpy.zeros( (self.dim_x, self.dim_x) )
 		
 		self.K = numpy.zeros( (self.dim_x, self.dim_z) )
-
+	
 	def Kalman_Filter(self, Pos, Vel, Ang, Cnb, Gyro, Acc, Z_Pos, Z_Vel, Z_Ang, Delta_T):
-
+		# 构建卡尔曼滤波需要的矩阵
 		self.Construct_A(Pos, Vel, Cnb, Acc)
 		self.Construct_H()
 		self.Construct_Q()
 		self.Construct_R()
-
+		
+		# 给出量测量
 		Z = numpy.zeros( (11, 1) )
 		Z[0] = Pos[1] - Z_Pos[1] 
 		Z[1] = Pos[0] - Z_Pos[0]
@@ -54,10 +55,12 @@ class KF():
 		Z[8] = Ang[2] - Z_Ang[2] * self.rad 
 		Z[9] = 0 
 		Z[10] = 0 
-
+		
+		# 构建一步状态转移矩阵
 		F = numpy.zeros( (15, 15) )
 		F = numpy.eye(15) + self.A * 0.1 / Delta_T
-
+		
+		# 进行更新
 		self.X_prediction = F.dot(self.X)
 		self.P_prediction = F.dot(self.P.dot(F.T)) + self.Q
 		self.K = self.P_prediction.dot(self.H.T) \
@@ -67,12 +70,13 @@ class KF():
 					+ self.K.dot(self.R).dot(self.K.T)
 
 		return self.X, Z[0:9]
-
+	
+	# 元素参考严恭敏老师出版的教材
 	def Construct_A(self, Pos, Vel, Cnb, Acc):
 		Rm = self.Re * (1 - 2 * self.e + 3 *self. e * math.sin( Pos[1] ) ** 2)
 		Rn = self.Re * (1 + self.e * math.sin( Pos[1] ) ** 2)
 		
-
+		#
 		self.A[0, 2] = - Vel[1] / (Rm + Pos[2]) ** 2
 		self.A[0, 4] = 1 / (Rm + Pos[2])
 		self.A[1, 0] = Vel[0] / (Rn + Pos[2]) / math.cos(Pos[1]) * math.tan(Pos[1])
@@ -134,6 +138,8 @@ class KF():
 		self.A[8, 9] = Cnb[2, 0]
 		self.A[8, 10] = Cnb[2, 1]
 		self.A[8, 11] = Cnb[2, 2]
+		
+		# 陀螺仪和加速度计的漂移参数，调试时可进行修改
 		self.A[9, 9] = - 1 / 300
 		self.A[10, 10] = - 1 / 300
 		self.A[11, 11] = - 1 / 300
@@ -147,13 +153,15 @@ class KF():
 
 
 	def Construct_Q(self):
-		self.Q[0:3, 0:3] = numpy.eye(3) * 4
-		self.Q[3:6, 3:6] = numpy.eye(3) * 4
+		# 系统噪声协方差矩阵
+		self.Q[0:3, 0:3] = numpy.eye(3) * 1
+		self.Q[3:6, 3:6] = numpy.eye(3) * 1
 		self.Q[6:9, 6:9] = numpy.eye(3)
 		self.Q[9:12, 9:12] = numpy.eye(3)
 		self.Q[12:15, 12:15] = numpy.eye(3)
 	
 	def Construct_R(self):
+		# 量测噪声协方差矩阵
 		self.R[0:3, 0:3] = numpy.eye(3)	* 0.01	#  receive error
 		self.R[3:6, 3:6] = numpy.eye(3) * 0.01	# 
 		self.R[6:9, 6:9] = numpy.eye(3) * 0.04 	#
